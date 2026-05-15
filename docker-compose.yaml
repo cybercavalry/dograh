@@ -175,6 +175,9 @@ services:
 
       OSS_JWT_SECRET: "${OSS_JWT_SECRET:-ChangeMeInProduction}"
 
+      # Neutralize Dograh-managed AI service (services.dograh.com) for fully-local setup
+      MPS_API_URL: "${MPS_API_URL:-http://disabled.invalid}"
+
       # Telemetry
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
       POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
@@ -189,8 +192,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      cloudflared:
-        condition: service_started
+      # cloudflared:
+      #   condition: service_started
     healthcheck:
       test:
         [
@@ -234,12 +237,44 @@ services:
     networks:
       - app-network
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared-tunnel
-    command: tunnel --no-autoupdate --url http://api:8000 --metrics 0.0.0.0:2000
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-tunnel
+  #   command: tunnel --no-autoupdate --url http://api:8000 --metrics 0.0.0.0:2000
+  #   ports:
+  #     - "2000:2000" # Expose metrics endpoint
+  #   networks:
+  #     - app-network
+
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: speaches
     ports:
-      - "2000:2000" # Expose metrics endpoint
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - speaches-cache:/home/ubuntu/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - app-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
     networks:
       - app-network
 
@@ -253,6 +288,10 @@ volumes:
   nginx-generated:
     driver: local
   coturn-generated:
+    driver: local
+  speaches-cache:
+    driver: local
+  ollama-data:
     driver: local
 
 networks:
